@@ -1759,6 +1759,7 @@
     statSolved: document.getElementById('statSolved'),
     resetStatsBtn: document.getElementById('resetStatsBtn'),
     scrollButtons: Array.from(document.querySelectorAll('[data-scroll]')),
+    gameCard: document.getElementById('gameCard'),
     siteHeader: document.querySelector('.site-header'),
     sessionEndOverlay: document.getElementById('sessionEndOverlay'),
     sessionEndIcon: document.getElementById('sessionEndIcon'),
@@ -1914,14 +1915,37 @@
     );
   }
 
-  function scrollToSection(target) {
+  const MOBILE_BREAKPOINT = 640;
+  function isMobileViewport() {
+    return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
+  }
+
+  // On mobile, entering/re-entering the game is centered in the viewport
+  // instead of docked near the top — the card is taller than the screen
+  // relative to desktop, so a top-anchored scroll tends to crop the
+  // action row. `center: true` requests that treatment (mobile-only).
+  function scrollToSection(target, { center = false } = {}) {
     if (!target) return;
+    if (center && isMobileViewport()) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     const headerH = el.siteHeader
       ? el.siteHeader.getBoundingClientRect().height
       : 0;
     const top =
       target.getBoundingClientRect().top + window.pageYOffset - headerH - 180;
     window.scrollTo({ top: Math.max(top, 0), behavior: 'smooth' });
+  }
+
+  // Re-centers the game card in the viewport on mobile after its content
+  // reflows (e.g. start-screen -> live board), so the newly revealed
+  // controls stay in view without the player having to scroll manually.
+  function recenterGameCardMobile() {
+    if (!isMobileViewport() || !el.gameCard) return;
+    requestAnimationFrame(() => {
+      el.gameCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   }
 
   function spawnConfetti(count = 26) {
@@ -2482,14 +2506,16 @@
   el.startGameBtn.addEventListener('click', () => {
     state.sessionStarted = true;
     startSession(state.categoryKey, state.difficulty);
+    recenterGameCardMobile();
   });
 
   el.playAgainBtn.addEventListener('click', () => {
     startSession(state.categoryKey, state.difficulty);
+    recenterGameCardMobile();
   });
   el.changeCategoryBtn.addEventListener('click', () => {
     returnToPicker();
-    scrollToSection(document.getElementById('game'));
+    scrollToSection(document.getElementById('game'), { center: true });
     el.categorySelect.classList.add('is-pulsing');
     setTimeout(() => el.categorySelect.classList.remove('is-pulsing'), 2400);
   });
@@ -2508,7 +2534,7 @@
     el.endSessionConfirmOverlay.hidden = true;
     returnToPicker();
     showToast('Session ended.');
-    scrollToSection(document.getElementById('game'));
+    scrollToSection(document.getElementById('game'), { center: true });
   });
 
   el.soundToggle.addEventListener('click', () => {
@@ -2535,7 +2561,11 @@
   el.scrollButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = document.querySelector(btn.dataset.scroll);
-      scrollToSection(target);
+      // "Play" (header) and "Start playing" (hero) both point at #game —
+      // on mobile, center that card in the viewport rather than just
+      // docking it near the top, so the whole board is visible at once.
+      const center = btn.dataset.scroll === '#game';
+      scrollToSection(target, { center });
     });
   });
 
